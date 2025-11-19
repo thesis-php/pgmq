@@ -17,9 +17,6 @@ final readonly class ConsumeHandler
 {
     public Pgmq\ConsumeContext $context;
 
-    /** @var DeferredFuture<*> */
-    private DeferredFuture $completionMarker;
-
     /**
      * @param callable(non-empty-list<Pgmq\Message>, Pgmq\ConsumeController): void $handler
      * @param Pipeline\Queue<null> $polls
@@ -31,11 +28,11 @@ final readonly class ConsumeHandler
         PollWatcher $watcher,
         private Pipeline\Queue $polls,
     ) {
-        $this->completionMarker = $completionMarker = new DeferredFuture();
+        $completionMarker = new DeferredFuture();
 
         $this->context = $context = new Pgmq\ConsumeContext(
             $this->stop(...),
-            $this->completionMarker->getFuture(),
+            $completionMarker->getFuture(),
         );
 
         EventLoop::queue(static function () use (
@@ -48,8 +45,9 @@ final readonly class ConsumeHandler
             $context,
         ): void {
             $watcher->watch();
+            $concurrentIterator = $polls->iterate();
 
-            foreach ($polls->iterate() as $_) {
+            while ($concurrentIterator->continue()) {
                 $tx = $pg->beginTransaction();
 
                 try {
@@ -74,10 +72,16 @@ final readonly class ConsumeHandler
                 } catch (\Throwable $e) {
                     $tx->rollback();
                     $completionMarker->error($e);
+
+                    break;
                 }
             }
 
             $watcher->cancel();
+
+            if (!$polls->isComplete()) {
+                $polls->complete();
+            }
 
             if (!$completionMarker->isComplete()) {
                 $completionMarker->complete();

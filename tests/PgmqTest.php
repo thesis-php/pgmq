@@ -8,10 +8,14 @@ use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnection;
 use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
+use function PHPUnit\Framework\assertCount;
+use function PHPUnit\Framework\assertEquals;
 
 #[CoversClass(Queue::class)]
 final class PgmqTest extends TestCase
@@ -322,6 +326,33 @@ final class PgmqTest extends TestCase
         self::assertEquals($messageIds, array_keys($consumed));
         self::assertEquals([self::TESTING_MESSAGE, self::TESTING_MESSAGE], array_values($consumed));
         self::assertSame(0, $queue->metrics()->length);
+    }
+
+    public function testStopConsumeOnUnhandledException(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $consumer = createConsumer($this->pg);
+
+        $context = $consumer->consume(
+            handler: static function (): void {
+                throw new \RuntimeException('from-consumer');
+            },
+            config: new ConsumeConfig(
+                queue: $queue->name,
+                pollInterval: TimeSpan::fromMilliseconds(1),
+            ),
+        );
+
+        send($this->pg, $queue->name, new SendMessage(self::TESTING_MESSAGE));
+        send($this->pg, $queue->name, new SendMessage(self::TESTING_MESSAGE));
+
+        try {
+            $context->awaitCompletion(new TimeoutCancellation(10));
+        } catch (\RuntimeException $e) {
+            assertEquals('from-consumer', $e->getMessage());
+        }
+
+        assertCount(2, [...readBatch($this->pg, $queue->name, 10)]);
     }
 
     /**
