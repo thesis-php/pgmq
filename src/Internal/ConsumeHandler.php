@@ -62,7 +62,6 @@ final readonly class ConsumeHandler
 
                     if (\count($messages) > 0) {
                         $handler(
-                            /** @phpstan-ignore argument.type */
                             $messages,
                             new Pgmq\ConsumeController($tx, new Pgmq\Queue($config->queue, $tx), $context),
                         );

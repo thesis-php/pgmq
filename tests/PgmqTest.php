@@ -10,7 +10,6 @@ use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
 use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
