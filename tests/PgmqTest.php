@@ -8,7 +8,9 @@ use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnection;
 use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
@@ -322,6 +324,31 @@ final class PgmqTest extends TestCase
         self::assertEquals($messageIds, array_keys($consumed));
         self::assertEquals([self::TESTING_MESSAGE, self::TESTING_MESSAGE], array_values($consumed));
         self::assertSame(0, $queue->metrics()->length);
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testStopConsumeOnUnhandledException(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $consumer = createConsumer($this->pg);
+
+        $context = $consumer->consume(
+            handler: static function (): void {
+                throw new \RuntimeException();
+            },
+            config: new ConsumeConfig(
+                queue: $queue->name,
+                pollInterval: TimeSpan::fromMilliseconds(1),
+            ),
+        );
+
+        send($this->pg, $queue->name, new SendMessage(self::TESTING_MESSAGE));
+        delay(0.1);
+
+        try {
+            $context->awaitCompletion(new TimeoutCancellation(10));
+        } catch (\Throwable) {
+        }
     }
 
     /**
