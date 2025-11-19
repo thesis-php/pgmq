@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Thesis\Pgmq\Internal;
 
-use Amp\Pipeline;
 use Revolt\EventLoop;
 use Thesis\Time\TimeSpan;
 
@@ -15,11 +14,8 @@ final class TimeoutWatcher implements PollWatcher
 {
     private ?string $callbackId = null;
 
-    /**
-     * @param Pipeline\Queue<null> $queue
-     */
     public function __construct(
-        private readonly Pipeline\Queue $queue,
+        private readonly PollQueue $queue,
         private readonly TimeSpan $interval,
     ) {}
 

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Thesis\Pgmq\Internal;
 
 use Amp\DeferredFuture;
-use Amp\Pipeline;
 use Amp\Postgres\PostgresConnection;
 use Revolt\EventLoop;
 use Thesis\Pgmq;
@@ -22,19 +21,18 @@ final readonly class ConsumeHandler
 
     /**
      * @param callable(non-empty-list<Pgmq\Message>, Pgmq\ConsumeController): void $handler
-     * @param Pipeline\Queue<null> $polls
      */
     public function __construct(
         PostgresConnection $pg,
         Pgmq\ConsumeConfig $config,
         callable $handler,
         PollWatcher $watcher,
-        private Pipeline\Queue $polls,
+        private PollQueue $polls,
     ) {
         $this->completionMarker = $completionMarker = new DeferredFuture();
 
         $this->context = $context = new Pgmq\ConsumeContext(
-            $this->stop(...),
+            $stop = $this->stop(...),
             $this->completionMarker->getFuture(),
         );
 
@@ -46,10 +44,15 @@ final readonly class ConsumeHandler
             $watcher,
             $completionMarker,
             $context,
+            $stop,
         ): void {
             $watcher->watch();
 
-            foreach ($polls->iterate() as $_) {
+            while (!$polls->completed()) {
+                if (!$polls->pop()) {
+                    break;
+                }
+
                 $tx = $pg->beginTransaction();
 
                 try {
@@ -64,7 +67,6 @@ final readonly class ConsumeHandler
 
                     if (\count($messages) > 0) {
                         $handler(
-                            /** @phpstan-ignore argument.type */
                             $messages,
                             new Pgmq\ConsumeController($tx, new Pgmq\Queue($config->queue, $tx), $context),
                         );
@@ -74,6 +76,7 @@ final readonly class ConsumeHandler
                 } catch (\Throwable $e) {
                     $tx->rollback();
                     $completionMarker->error($e);
+                    $stop();
                 }
             }
 
@@ -87,8 +90,6 @@ final readonly class ConsumeHandler
 
     public function stop(): void
     {
-        if (!$this->polls->isComplete()) {
-            $this->polls->complete();
-        }
+        $this->polls->complete();
     }
 }

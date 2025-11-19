@@ -324,6 +324,31 @@ final class PgmqTest extends TestCase
         self::assertSame(0, $queue->metrics()->length);
     }
 
+    public function testStopConsumeOnUnhandledException(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $consumer = createConsumer($this->pg);
+
+        $context = $consumer->consume(
+            handler: static function (): void {
+                throw new \RuntimeException('from-consumer');
+            },
+            config: new ConsumeConfig(
+                queue: $queue->name,
+                pollInterval: TimeSpan::fromMilliseconds(1),
+            ),
+        );
+
+        send($this->pg, $queue->name, new SendMessage(self::TESTING_MESSAGE));
+        send($this->pg, $queue->name, new SendMessage(self::TESTING_MESSAGE));
+
+        try {
+            $context->awaitCompletion();
+        } catch (\RuntimeException $e) {
+            self::assertEquals('from-consumer', $e->getMessage());
+        }
+    }
+
     /**
      * @return non-empty-string
      */

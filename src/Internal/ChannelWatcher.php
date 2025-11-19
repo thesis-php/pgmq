@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Thesis\Pgmq\Internal;
 
-use Amp\Pipeline;
 use Amp\Postgres\PostgresListener;
 use Revolt\EventLoop;
 
@@ -13,11 +12,8 @@ use Revolt\EventLoop;
  */
 final readonly class ChannelWatcher implements PollWatcher
 {
-    /**
-     * @param Pipeline\Queue<null> $queue
-     */
     public function __construct(
-        private Pipeline\Queue $queue,
+        private PollQueue $queue,
         private PostgresListener $listener,
         private ?TimeoutWatcher $timeout = null,
     ) {}

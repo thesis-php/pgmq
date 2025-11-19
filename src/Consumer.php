@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Thesis\Pgmq;
 
 use Amp\Future;
-use Amp\Pipeline;
 use Amp\Postgres\PostgresConnection;
 use function Amp\async;
 
@@ -31,11 +30,7 @@ final class Consumer
     ): ConsumeContext {
         $queue = findQueue($this->pg, $config->queue);
 
-        /** @var Pipeline\Queue<null> $polls */
-        $polls = new Pipeline\Queue(1);
-
-        // Initial poll request.
-        $polls->push(null);
+        $polls = new Internal\PollQueue();
 
         /** @var list<Internal\PollWatcher> $watchers */
         $watchers = [];
