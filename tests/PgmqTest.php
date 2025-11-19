@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
+use function PHPUnit\Framework\assertEquals;
 
 #[CoversClass(Queue::class)]
 final class PgmqTest extends TestCase
@@ -326,7 +327,6 @@ final class PgmqTest extends TestCase
         self::assertSame(0, $queue->metrics()->length);
     }
 
-    #[DoesNotPerformAssertions]
     public function testStopConsumeOnUnhandledException(): void
     {
         $queue = createQueue($this->pg, $this->randomQueueName());
@@ -334,7 +334,7 @@ final class PgmqTest extends TestCase
 
         $context = $consumer->consume(
             handler: static function (): void {
-                throw new \RuntimeException();
+                throw new \RuntimeException('from-consumer');
             },
             config: new ConsumeConfig(
                 queue: $queue->name,
@@ -347,7 +347,8 @@ final class PgmqTest extends TestCase
 
         try {
             $context->awaitCompletion(new TimeoutCancellation(10));
-        } catch (\Throwable) {
+        } catch (\RuntimeException $e) {
+            assertEquals('from-consumer', $e->getMessage());
         }
     }
 
