@@ -17,9 +17,6 @@ final readonly class ConsumeHandler
 {
     public Pgmq\ConsumeContext $context;
 
-    /** @var DeferredFuture<*> */
-    private DeferredFuture $completionMarker;
-
     /**
      * @param callable(non-empty-list<Pgmq\Message>, Pgmq\ConsumeController): void $handler
      * @param Pipeline\Queue<null> $polls
@@ -31,11 +28,12 @@ final readonly class ConsumeHandler
         PollWatcher $watcher,
         private Pipeline\Queue $polls,
     ) {
-        $this->completionMarker = $completionMarker = new DeferredFuture();
+        $completionMarker = new DeferredFuture();
+        $stop = $this->stop(...);
 
         $this->context = $context = new Pgmq\ConsumeContext(
-            $this->stop(...),
-            $this->completionMarker->getFuture(),
+            $stop,
+            $completionMarker->getFuture()->finally($stop),
         );
 
         EventLoop::queue(static function () use (
@@ -48,8 +46,9 @@ final readonly class ConsumeHandler
             $context,
         ): void {
             $watcher->watch();
+            $poolsIterator = $polls->iterate();
 
-            foreach ($polls->iterate() as $_) {
+            foreach ($poolsIterator as $_) {
                 $tx = $pg->beginTransaction();
 
                 try {
@@ -64,7 +63,6 @@ final readonly class ConsumeHandler
 
                     if (\count($messages) > 0) {
                         $handler(
-                            /** @phpstan-ignore argument.type */
                             $messages,
                             new Pgmq\ConsumeController($tx, new Pgmq\Queue($config->queue, $tx), $context),
                         );
@@ -74,6 +72,8 @@ final readonly class ConsumeHandler
                 } catch (\Throwable $e) {
                     $tx->rollback();
                     $completionMarker->error($e);
+
+                    break;
                 }
             }
 
