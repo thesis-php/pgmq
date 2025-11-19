@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Pgmq;
 
 use Amp\Future;
-use Amp\Postgres\PostgresExecutor;
+use Amp\Postgres\PostgresTransaction;
 use Thesis\Time\TimeSpan;
 use function Amp\async;
 
@@ -15,7 +15,7 @@ use function Amp\async;
 final readonly class ConsumeController
 {
     public function __construct(
-        public PostgresExecutor $tx,
+        public PostgresTransaction $tx,
         private Queue $queue,
         private ConsumeContext $context,
     ) {}
