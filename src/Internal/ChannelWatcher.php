@@ -27,7 +27,7 @@ final readonly class ChannelWatcher implements PollWatcher
         EventLoop::queue(function (): void {
             foreach ($this->listener as $_) {
                 $this->timeout?->reschedule();
-                $this->queue->push(null);
+                $this->queue->pushAsync(null)->ignore();
             }
         });
     }
