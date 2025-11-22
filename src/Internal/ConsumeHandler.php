@@ -31,6 +31,7 @@ final readonly class ConsumeHandler
         PollWatcher $watcher,
         private Pipeline\Queue $polls,
     ) {
+        $iterator = $polls->iterate();
         $this->completionMarker = $completionMarker = new DeferredFuture();
 
         $this->context = $context = new Pgmq\ConsumeContext(
@@ -42,14 +43,14 @@ final readonly class ConsumeHandler
             $pg,
             $config,
             $handler,
-            $polls,
+            $iterator,
             $watcher,
             $completionMarker,
             $context,
         ): void {
             $watcher->watch();
 
-            foreach ($polls->iterate() as $_) {
+            foreach ($iterator as $_) {
                 $tx = $pg->beginTransaction();
 
                 try {
@@ -64,7 +65,6 @@ final readonly class ConsumeHandler
 
                     if (\count($messages) > 0) {
                         $handler(
-                            /** @phpstan-ignore argument.type */
                             $messages,
                             new Pgmq\ConsumeController($tx, new Pgmq\Queue($config->queue, $tx), $context),
                         );
@@ -74,6 +74,8 @@ final readonly class ConsumeHandler
                 } catch (\Throwable $e) {
                     $tx->rollback();
                     $completionMarker->error($e);
+                    $iterator->dispose();
+                    break;
                 }
             }
 

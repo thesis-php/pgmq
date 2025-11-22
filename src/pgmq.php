@@ -321,7 +321,7 @@ function read(
  * @api
  * @param non-empty-string $queue
  * @param positive-int $count
- * @return iterable<Message>
+ * @return iterable<int, Message>
  */
 function readBatch(
     PostgresLink $pg,
