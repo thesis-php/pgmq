@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Pgmq;
 
-use Amp\Future;
 use Amp\Postgres\PostgresTransaction;
 use Thesis\Time\TimeSpan;
-use function Amp\async;
 
 /**
  * @api
@@ -41,17 +39,13 @@ final readonly class ConsumeController
      */
     public function nack(array $messages, TimeSpan $delay): void
     {
-        $futures = [];
-
-        foreach ($messages as $message) {
-            $futures[] = async(
-                $this->queue->setVisibilityTimeout(...),
-                $message->id,
-                $delay,
-            );
-        }
-
-        Future\awaitAll($futures);
+        $this->queue->setVisibilityTimeout(
+            array_map(
+                static fn(Message $message): int => $message->id,
+                $messages,
+            ),
+            $delay,
+        );
     }
 
     /**

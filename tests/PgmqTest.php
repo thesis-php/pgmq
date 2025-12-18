@@ -324,6 +324,49 @@ final class PgmqTest extends TestCase
         self::assertSame(0, $queue->metrics()->length);
     }
 
+    public function testNackBatch(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $messageIds = $queue->sendBatch([
+            new SendMessage(self::TESTING_MESSAGE),
+            new SendMessage(self::TESTING_MESSAGE),
+        ]);
+
+        self::assertCount(2, $messageIds);
+        self::assertSame(2, $queue->metrics()->length);
+
+        $count = 0;
+
+        /** @var array<non-negative-int, list<non-empty-string>> $consumed */
+        $consumed = [];
+
+        $consumer = createConsumer($this->pg);
+        $context = $consumer->consume(
+            static function (array $messages, ConsumeController $ctrl) use (&$consumed, &$count): void {
+                /** @var Message $message */
+                foreach ($messages as $message) {
+                    $consumed[$message->id][] = $message->value;
+                    ++$count;
+                }
+
+                if ($count === 2) {
+                    $ctrl->nack($messages, TimeSpan::fromSeconds(1));
+                } elseif ($count > 2) {
+                    $ctrl->ack($messages);
+                    $ctrl->stop();
+                }
+            },
+            new ConsumeConfig($queue->name, pollInterval: TimeSpan::fromMilliseconds(500)),
+        );
+
+        $context->awaitCompletion();
+
+        self::assertCount(2, $consumed);
+        self::assertEquals($messageIds, array_keys($consumed));
+        self::assertEquals([[self::TESTING_MESSAGE, self::TESTING_MESSAGE], [self::TESTING_MESSAGE, self::TESTING_MESSAGE]], array_values($consumed));
+        self::assertSame(0, $queue->metrics()->length);
+    }
+
     public function testStopConsumeOnUnhandledException(): void
     {
         $queue = createQueue($this->pg, $this->randomQueueName());
