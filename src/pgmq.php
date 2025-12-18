@@ -438,17 +438,18 @@ function deleteBatch(
 /**
  * @api
  * @param non-empty-string $queue
+ * @param list<int> $messageIds
  */
 function setVisibilityTimeout(
     PostgresLink $pg,
     string $queue,
-    int $messageId,
+    array $messageIds,
     TimeSpan $visibilityTimeout,
 ): ?Message {
     $row = $pg
-        ->execute('SELECT * FROM pgmq.set_vt(:queue_name, :msg_id::bigint, :vt::int)', [
+        ->execute('SELECT * FROM pgmq.set_vt(:queue_name, :msg_ids::bigint[], :vt::int)', [
             'queue_name' => $queue,
-            'msg_id' => $messageId,
+            'msg_ids' => $messageIds,
             'vt' => $visibilityTimeout->toSeconds(),
         ])
         ->fetchRow();

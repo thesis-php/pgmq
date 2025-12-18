@@ -180,12 +180,15 @@ final readonly class Queue
         );
     }
 
-    public function setVisibilityTimeout(int $messageId, TimeSpan $visibilityTimeout): ?Message
+    /**
+     * @param list<int> $messageIds
+     */
+    public function setVisibilityTimeout(array $messageIds, TimeSpan $visibilityTimeout): ?Message
     {
         return setVisibilityTimeout(
             pg: $this->pg,
             queue: $this->name,
-            messageId: $messageId,
+            messageIds: $messageIds,
             visibilityTimeout: $visibilityTimeout,
         );
     }
