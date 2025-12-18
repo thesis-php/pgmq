@@ -466,8 +466,7 @@ function enableNotifyInsert(
     string $queue,
     ?TimeSpan $throttleInterval = null,
 ): string {
-    // Add the parameter ":throttle_interval_ms" when extension version v1.8.0 is released.
-    $pg->execute('SELECT pgmq.enable_notify_insert(:queue_name)', [
+    $pg->execute('SELECT pgmq.enable_notify_insert(:queue_name, :throttle_interval_ms)', [
         'queue_name' => $queue,
         'throttle_interval_ms' => ($throttleInterval ?? TimeSpan::fromMilliseconds(30))->toMilliseconds(),
     ]);

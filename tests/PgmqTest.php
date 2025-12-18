@@ -269,7 +269,7 @@ final class PgmqTest extends TestCase
     {
         $queue = createQueue($this->pg, $this->randomQueueName());
 
-        self::assertSame(channelName($queue->name), $queue->enableNotifyInsert());
+        self::assertSame(channelName($queue->name), $queue->enableNotifyInsert(TimeSpan::fromSeconds(1)));
 
         $queue->disableNotifyInsert();
     }
