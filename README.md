@@ -46,8 +46,6 @@ And only the consumer accepts `Amp\Postgres\PostgresConnection`, because it itse
 ### Create queue
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -59,8 +57,6 @@ $queue = Pgmq\createQueue($pg, 'events');
 ### Create unlogged queue
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -72,8 +68,6 @@ $queue = Pgmq\createUnloggedQueue($pg, 'events');
 ### Create partitioned queue
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -90,8 +84,6 @@ $queue = Pgmq\createPartitionedQueue(
 ### List queues
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -106,8 +98,6 @@ foreach (Pgmq\listQueues($pg) as $queue) {
 ### List queue metrics
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -121,8 +111,6 @@ foreach (Pgmq\metrics($pg) as $metrics) {
 ### List queue metadata
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -136,8 +124,6 @@ foreach (Pgmq\listQueueMetadata($pg) as $md) {
 ### Drop queue
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -150,8 +136,6 @@ $queue->drop();
 ### Purge queue
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -164,8 +148,6 @@ var_dump($queue->purge());
 ### Send message
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -178,8 +160,6 @@ $messageId = $queue->send(new Pgmq\SendMessage('{"id": 1}', '{"x-header": "x-val
 ### Send message with relative delay
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 use Thesis\Time\TimeSpan;
@@ -196,8 +176,6 @@ $messageId = $queue->send(
 ### Send message with absolute delay
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -213,8 +191,6 @@ $messageId = $queue->send(
 ### Send batch
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -230,8 +206,6 @@ $messageIds = $queue->sendBatch([
 ### Send batch with relative delay
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 use Thesis\Time\TimeSpan;
@@ -251,8 +225,6 @@ $messageIds = $queue->sendBatch(
 ### Send batch with absolute delay
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -271,8 +243,6 @@ $messageIds = $queue->sendBatch(
 ### Read message
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 use Thesis\Time\TimeSpan;
@@ -286,8 +256,6 @@ $message = $queue->read(TimeSpan::fromSeconds(20));
 ### Read batch
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 use Thesis\Time\TimeSpan;
@@ -301,8 +269,6 @@ $message = $queue->readBatch(10, TimeSpan::fromSeconds(20));
 ### Pop message
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -315,8 +281,6 @@ $message = $queue->pop();
 ### Read batch with poll
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 use Thesis\Time\TimeSpan;
@@ -334,8 +298,6 @@ $messages = $queue->readPoll(
 ### Set visibility timeout
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 use Thesis\Time\TimeSpan;
@@ -355,8 +317,6 @@ if ($message !== null) {
 ### Archive message
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -373,8 +333,6 @@ if ($message !== null) {
 ### Archive batch
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -394,8 +352,6 @@ if ($messages !== []) {
 ### Delete message
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -412,8 +368,6 @@ if ($message !== null) {
 ### Delete batch
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -433,8 +387,6 @@ if ($messages !== []) {
 ### Enable notify insert
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -447,8 +399,6 @@ $channel = $queue->enableNotifyInsert(); // postgres channel to listen is return
 ### Disable notify insert
 
 ```php
-<?php
-
 use Thesis\Pgmq;
 use Amp\Postgres;
 
@@ -465,10 +415,6 @@ This functionality is not a standard feature of the **pgmq** extension, but is p
 1. First of all, create the extension if it doesn't exist yet:
 
 ```php
-<?php
-
-declare(strict_types=1);
-
 use Thesis\Pgmq;
 
 Pgmq\createExtension($pg);
@@ -477,10 +423,6 @@ Pgmq\createExtension($pg);
 2. Then create a queue:
 
 ```php
-<?php
-
-declare(strict_types=1);
-
 use Thesis\Pgmq;
 
 Pgmq\createExtension($pg);
@@ -490,10 +432,6 @@ Pgmq\createQueue($pg, 'events');
 3. Next, create the consumer object:
 
 ```php
-<?php
-
-declare(strict_types=1);
-
 use Thesis\Pgmq;
 
 Pgmq\createExtension($pg);
@@ -505,10 +443,6 @@ $consumer = Pgmq\createConsumer($pg);
 4. Now we can proceed to configure the queue consumer handler:
 
 ```php
-<?php
-
-declare(strict_types=1);
-
 use Thesis\Pgmq;
 
 Pgmq\createExtension($pg);
@@ -545,10 +479,6 @@ Through the `Pgmq\ConsumeController`, you can:
 Since receiving messages and `acking/nacking` them occur within the same transaction, for your own database queries you must use the `ConsumeController::$tx` object to ensure exactly-once semantics for message processing.
 
 ```php
-<?php
-
-declare(strict_types=1);
-
 use Thesis\Pgmq;
 
 Pgmq\createExtension($pg);
@@ -571,10 +501,6 @@ Using `ConsumeContext`, you can gracefully stop the consumer, waiting for the cu
 
 
 ```php
-<?php
-
-declare(strict_types=1);
-
 use Thesis\Pgmq;
 use function Amp\trapSignal;
 
@@ -602,10 +528,6 @@ $context->awaitCompletion();
 Or stop all current consumers using `$consumer->stop()`:
 
 ```php
-<?php
-
-declare(strict_types=1);
-
 use Thesis\Pgmq;
 use function Amp\trapSignal;
 
