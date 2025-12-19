@@ -31,7 +31,7 @@ final class TimeoutWatcher implements PollWatcher
 
     public function watch(): void
     {
-        $this->callbackId = EventLoop::repeat($this->interval->toSeconds(), function (): void {
+        $this->callbackId = EventLoop::repeat($this->interval->toSeconds(precision: 4), function (): void {
             $this->queue->pushAsync(null)->ignore();
         });
     }
