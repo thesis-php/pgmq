@@ -19,14 +19,14 @@ final readonly class ChannelWatcher implements PollWatcher
     public function __construct(
         private Pipeline\Queue $queue,
         private PostgresListener $listener,
-        private ?TimeoutWatcher $timeout = null,
+        private TimeoutWatcher $timeout,
     ) {}
 
     public function watch(): void
     {
         EventLoop::queue(function (): void {
             foreach ($this->listener as $_) {
-                $this->timeout?->reschedule();
+                $this->timeout->reschedule();
                 $this->queue->pushAsync(null)->ignore();
             }
         });

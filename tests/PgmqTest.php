@@ -280,7 +280,7 @@ final class PgmqTest extends TestCase
         $consumer = createConsumer($this->pg);
 
         self::expectException(\LogicException::class);
-        self::expectExceptionMessage('At least one watcher must be configured. Either set a positive $pollInterval or enable $listenForInserts or both.');
+        self::expectExceptionMessage('Pooling is required. Set $pollInterval to a positive value.');
         $consumer->consume(static fn() => null, new ConsumeConfig(
             queue: $queue->name,
             pollInterval: TimeSpan::fromSeconds(0),
