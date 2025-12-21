@@ -42,11 +42,9 @@ final class Consumer
 
         $timeoutWatcher = $config->pollInterval->isPositive()
             ? new Internal\TimeoutWatcher($polls, $config->pollInterval)
-            : null;
+            : throw new \LogicException('Pooling is required. Set $pollInterval to a positive value.');
 
-        if ($timeoutWatcher !== null) {
-            $watchers[] = $timeoutWatcher;
-        }
+        $watchers[] = $timeoutWatcher;
 
         if ($config->listenForInserts) {
             $channelName = $queue->enableNotifyInsert();
@@ -56,10 +54,6 @@ final class Consumer
                 $this->pg->listen($channelName),
                 $timeoutWatcher,
             );
-        }
-
-        if (\count($watchers) === 0) {
-            throw new \LogicException('At least one watcher must be configured. Either set a positive $pollInterval or enable $listenForInserts or both.');
         }
 
         $handle = new Internal\ConsumeHandler(
