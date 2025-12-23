@@ -9,34 +9,35 @@ use Amp\Pipeline;
 use Amp\Postgres\PostgresConnection;
 use Revolt\EventLoop;
 use Thesis\Pgmq;
+use Thesis\Pgmq\ConsumeController;
+use Thesis\Pgmq\Message;
 
 /**
  * @internal
  */
-final readonly class ConsumeHandler
+final readonly class ConsumeScheduler
 {
-    public Pgmq\ConsumeContext $context;
-
-    /** @var DeferredFuture<*> */
-    private DeferredFuture $completionMarker;
-
     /**
-     * @param callable(non-empty-list<Pgmq\Message>, Pgmq\ConsumeController): void $handler
+     * @param callable(non-empty-list<Message>, ConsumeController): void $handler
      * @param Pipeline\Queue<null> $polls
      */
-    public function __construct(
+    public static function schedule(
         PostgresConnection $pg,
         Pgmq\ConsumeConfig $config,
         callable $handler,
         PollWatcher $watcher,
-        private Pipeline\Queue $polls,
-    ) {
+        Pipeline\Queue $polls,
+    ): Pgmq\ConsumeContext {
         $iterator = $polls->iterate();
-        $this->completionMarker = $completionMarker = new DeferredFuture();
+        $completionMarker = new DeferredFuture();
 
-        $this->context = $context = new Pgmq\ConsumeContext(
-            $this->stop(...),
-            $this->completionMarker->getFuture(),
+        $context = new Pgmq\ConsumeContext(
+            stop: static function () use ($polls): void {
+                if (!$polls->isComplete()) {
+                    $polls->complete();
+                }
+            },
+            completionMarker: $completionMarker->getFuture(),
         );
 
         EventLoop::queue(static function () use (
@@ -66,7 +67,7 @@ final readonly class ConsumeHandler
                     if (\count($messages) > 0) {
                         $handler(
                             $messages,
-                            new Pgmq\ConsumeController($tx, new Pgmq\Queue($config->queue, $tx), $context),
+                            new ConsumeController($tx, $config->queue, $context),
                         );
                     }
 
@@ -85,12 +86,7 @@ final readonly class ConsumeHandler
                 $completionMarker->complete();
             }
         });
-    }
 
-    public function stop(): void
-    {
-        if (!$this->polls->isComplete()) {
-            $this->polls->complete();
-        }
+        return $context;
     }
 }
