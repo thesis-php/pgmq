@@ -8,13 +8,14 @@ use Amp\Future;
 use Amp\Pipeline;
 use Amp\Postgres\PostgresConnection;
 use function Amp\async;
+use function Thesis\Pgmq\Internal\consume;
 
 /**
  * @api
  */
 final class Consumer
 {
-    /** @var list<Internal\ConsumeHandler> */
+    /** @var list<ConsumeContext> */
     private array $consumers = [];
 
     public function __construct(
@@ -56,7 +57,7 @@ final class Consumer
             );
         }
 
-        $handle = new Internal\ConsumeHandler(
+        $context = consume(
             $this->pg,
             $config,
             $handler,
@@ -64,9 +65,7 @@ final class Consumer
             $polls,
         );
 
-        $this->consumers[] = $handle;
-
-        return $handle->context;
+        return $this->consumers[] = $context;
     }
 
     public function stop(): void

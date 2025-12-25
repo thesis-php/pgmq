@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Pgmq;
 
 use Amp\Postgres\PostgresTransaction;
+use Thesis\Pgmq;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -12,9 +13,12 @@ use Thesis\Time\TimeSpan;
  */
 final readonly class ConsumeController
 {
+    /**
+     * @param non-empty-string $queue
+     */
     public function __construct(
         public PostgresTransaction $tx,
-        private Queue $queue,
+        private string $queue,
         private ConsumeContext $context,
     ) {}
 
@@ -28,10 +32,11 @@ final readonly class ConsumeController
      */
     public function ack(array $messages): void
     {
-        $this->queue->deleteBatch(array_map(
-            static fn(Message $message): int => $message->id,
-            $messages,
-        ));
+        Pgmq\deleteBatch(
+            pg: $this->tx,
+            queue: $this->queue,
+            messageIds: array_map(static fn(Message $m) => $m->id, $messages),
+        );
     }
 
     /**
@@ -39,12 +44,11 @@ final readonly class ConsumeController
      */
     public function nack(array $messages, TimeSpan $delay): void
     {
-        $this->queue->setVisibilityTimeout(
-            array_map(
-                static fn(Message $message): int => $message->id,
-                $messages,
-            ),
-            $delay,
+        Pgmq\setVisibilityTimeout(
+            pg: $this->tx,
+            queue: $this->queue,
+            messageIds: array_map(static fn(Message $m) => $m->id, $messages),
+            visibilityTimeout: $delay,
         );
     }
 
@@ -53,9 +57,10 @@ final readonly class ConsumeController
      */
     public function term(array $messages): void
     {
-        $this->queue->archiveBatch(array_map(
-            static fn(Message $message): int => $message->id,
-            $messages,
-        ));
+        Pgmq\archiveBatch(
+            pg: $this->tx,
+            queue: $this->queue,
+            messageIds: array_map(static fn(Message $m) => $m->id, $messages),
+        );
     }
 }
