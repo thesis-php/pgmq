@@ -8,6 +8,7 @@ use Amp\Future;
 use Amp\Pipeline;
 use Amp\Postgres\PostgresConnection;
 use function Amp\async;
+use function Thesis\Pgmq\Internal\consume;
 
 /**
  * @api
@@ -56,7 +57,7 @@ final class Consumer
             );
         }
 
-        $context = Internal\ConsumeScheduler::schedule(
+        $context = consume(
             $this->pg,
             $config,
             $handler,

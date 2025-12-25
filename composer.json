@@ -35,7 +35,8 @@
             "Thesis\\Pgmq\\": "src/"
         },
         "files": [
-            "src/pgmq.php"
+            "src/pgmq.php",
+            "src/Internal/functions.php"
         ]
     },
     "autoload-dev": {
