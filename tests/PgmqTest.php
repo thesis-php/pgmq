@@ -9,6 +9,7 @@ use Amp\Postgres\PostgresConnection;
 use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
@@ -391,6 +392,7 @@ final class PgmqTest extends TestCase
         $context->awaitCompletion();
     }
 
+    #[DoesNotPerformAssertions]
     public function testConsumerStoppingShouldNotCompeteWithPolling(): void
     {
         $queue = createQueue($this->pg, $this->randomQueueName());
