@@ -25,8 +25,9 @@ function consume(
     $completionMarker = new DeferredFuture();
 
     $context = new Pgmq\ConsumeContext(
-        stop: static function () use ($polls): void {
+        stop: static function () use ($watcher, $polls): void {
             if (!$polls->isComplete()) {
+                $watcher->cancel();
                 $polls->complete();
             }
         },
@@ -68,12 +69,11 @@ function consume(
             } catch (\Throwable $e) {
                 $tx->rollback();
                 $completionMarker->error($e);
+                $watcher->cancel();
                 $iterator->dispose();
                 break;
             }
         }
-
-        $watcher->cancel();
 
         if (!$completionMarker->isComplete()) {
             $completionMarker->complete();
