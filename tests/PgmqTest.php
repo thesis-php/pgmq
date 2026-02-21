@@ -391,6 +391,27 @@ final class PgmqTest extends TestCase
         $context->awaitCompletion();
     }
 
+    public function testConsumerStoppingShouldNotCompeteWithPolling(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $consumer = createConsumer($this->pg);
+
+        $config = new ConsumeConfig(
+            queue: $queue->name,
+            batch: 1,
+            pollInterval: TimeSpan::fromMilliseconds(1),
+            listenForInserts: false,
+        );
+
+        $ctx = $consumer->consume(
+            static function (array $messages, ConsumeController $c): void {},
+            $config,
+        );
+
+        $ctx->stop();
+        $ctx->awaitCompletion();
+    }
+
     /**
      * @return non-empty-string
      */
