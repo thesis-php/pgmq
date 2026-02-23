@@ -9,6 +9,7 @@ use Amp\Postgres\PostgresConnection;
 use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
@@ -389,6 +390,28 @@ final class PgmqTest extends TestCase
         self::expectException(\RuntimeException::class);
         self::expectExceptionMessage('Exception from consumer');
         $context->awaitCompletion();
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testConsumerStoppingShouldNotCompeteWithPolling(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $consumer = createConsumer($this->pg);
+
+        $config = new ConsumeConfig(
+            queue: $queue->name,
+            batch: 1,
+            pollInterval: TimeSpan::fromMilliseconds(1),
+            listenForInserts: false,
+        );
+
+        $ctx = $consumer->consume(
+            static function (array $messages, ConsumeController $c): void {},
+            $config,
+        );
+
+        $ctx->stop();
+        $ctx->awaitCompletion();
     }
 
     /**
