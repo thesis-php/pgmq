@@ -501,6 +501,123 @@ final class PgmqTest extends TestCase
         }
     }
 
+    public function testReadGrouped(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->createFifoIndex();
+
+        $queue->send(new SendMessage(self::TESTING_MESSAGE, '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage(self::TESTING_MESSAGE, '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage(self::TESTING_MESSAGE, '{"x-pgmq-group": "b"}'));
+
+        $messages = [...$queue->readGrouped(10)];
+
+        self::assertCount(3, $messages);
+
+        $groups = array_map(
+            static fn(Message $message) => self::findHeader($message, 'x-pgmq-group', \strval(...)),
+            $messages,
+        );
+
+        self::assertContains('a', $groups);
+        self::assertContains('b', $groups);
+    }
+
+    public function testReadGroupedRR(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->createFifoIndex();
+
+        $queue->send(new SendMessage('{"order": 1}', '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage('{"order": 2}', '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage('{"order": 3}', '{"x-pgmq-group": "b"}'));
+        $queue->send(new SendMessage('{"order": 4}', '{"x-pgmq-group": "b"}'));
+
+        $messages = [...$queue->readGroupedRR(10)];
+
+        self::assertCount(4, $messages);
+
+        $groups = array_map(
+            static fn(Message $message) => self::findHeader($message, 'x-pgmq-group', \strval(...)),
+            $messages,
+        );
+
+        self::assertContains('a', $groups);
+        self::assertContains('b', $groups);
+    }
+
+    public function testReadGroupedHead(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->createFifoIndex();
+
+        $queue->send(new SendMessage('{"order": 1}', '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage('{"order": 2}', '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage('{"order": 3}', '{"x-pgmq-group": "b"}'));
+
+        $messages = [...$queue->readGroupedHead(10)];
+
+        self::assertCount(2, $messages);
+
+        $groups = array_map(
+            static fn(Message $message) => self::findHeader($message, 'x-pgmq-group', \strval(...)),
+            $messages,
+        );
+
+        self::assertContains('a', $groups);
+        self::assertContains('b', $groups);
+    }
+
+    public function testReadGroupedWithPoll(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->createFifoIndex();
+
+        $queue->send(new SendMessage(self::TESTING_MESSAGE, '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage(self::TESTING_MESSAGE, '{"x-pgmq-group": "b"}'));
+
+        $messages = [...$queue->readGroupedWithPoll(
+            count: 10,
+            maxPoll: TimeSpan::fromSeconds(1),
+            pollInterval: TimeSpan::fromMilliseconds(100),
+        )];
+
+        self::assertCount(2, $messages);
+    }
+
+    public function testReadGroupedRRWithPoll(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->createFifoIndex();
+
+        $queue->send(new SendMessage(self::TESTING_MESSAGE, '{"x-pgmq-group": "a"}'));
+        $queue->send(new SendMessage(self::TESTING_MESSAGE, '{"x-pgmq-group": "b"}'));
+
+        $messages = [...$queue->readGroupedRRWithPoll(
+            count: 10,
+            maxPoll: TimeSpan::fromSeconds(1),
+            pollInterval: TimeSpan::fromMilliseconds(100),
+        )];
+
+        self::assertCount(2, $messages);
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testCreateFifoIndex(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->createFifoIndex();
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testCreateFifoIndexAll(): void
+    {
+        createQueue($this->pg, $this->randomQueueName());
+        createQueue($this->pg, $this->randomQueueName());
+
+        createFifoIndexAll($this->pg);
+    }
+
     public function testValidateRoutingKey(): void
     {
         validateRoutingKey($this->pg, 'events.created');
@@ -526,5 +643,28 @@ final class PgmqTest extends TestCase
     {
         /** @var non-empty-string */
         return substr(bin2hex(random_bytes(30)), 0, length: 30);
+    }
+
+    /**
+     * @template T
+     * @param non-empty-string $header
+     * @param callable(scalar): T $coerce
+     * @param T $default
+     * @return ($default is null ? (?T) : T)
+     */
+    private static function findHeader(
+        Message $message,
+        string $header,
+        callable $coerce,
+        mixed $default = null,
+    ): mixed {
+        /** @var array<non-empty-string, scalar> $headers */
+        $headers = json_decode($message->headers ?? '{}', true);
+
+        if (isset($headers[$header])) {
+            return $coerce($headers[$header]);
+        }
+
+        return $default;
     }
 }

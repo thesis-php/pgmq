@@ -48,6 +48,13 @@ And only the consumer accepts `Amp\Postgres\PostgresConnection`, because it itse
  - [Test routing](#test-routing)
  - [Validate routing key](#validate-routing-key)
  - [Validate topic pattern](#validate-topic-pattern)
+ - [Read grouped](#read-grouped)
+ - [Read grouped round-robin](#read-grouped-round-robin)
+ - [Read grouped head](#read-grouped-head)
+ - [Read grouped with poll](#read-grouped-with-poll)
+ - [Read grouped round-robin with poll](#read-grouped-round-robin-with-poll)
+ - [Create FIFO index](#create-fifo-index)
+ - [Create FIFO index for all queues](#create-fifo-index-for-all-queues)
  - [Consume messages](#consume-messages)
 
 ### Create queue
@@ -507,6 +514,113 @@ use Amp\Postgres;
 $pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
 
 Pgmq\validateTopicPattern($pg, 'events.*'); // throws PostgresQueryError if invalid
+```
+
+### Read grouped
+
+Read messages respecting FIFO ordering within groups. Messages are grouped by the `x-pgmq-group` header. Only the oldest unprocessed message from each group is returned.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+use Thesis\Time\TimeSpan;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$queue = Pgmq\createQueue($pg, 'orders');
+$queue->send(new Pgmq\SendMessage('{"action": "created"}', '{"x-pgmq-group": "order-1"}'));
+$queue->send(new Pgmq\SendMessage('{"action": "paid"}', '{"x-pgmq-group": "order-1"}'));
+$queue->send(new Pgmq\SendMessage('{"action": "created"}', '{"x-pgmq-group": "order-2"}'));
+
+$messages = $queue->readGrouped(10, TimeSpan::fromSeconds(30));
+```
+
+### Read grouped round-robin
+
+Read messages with round-robin distribution across groups.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$queue = Pgmq\createQueue($pg, 'orders');
+$messages = $queue->readGroupedRR(10);
+```
+
+### Read grouped head
+
+Read exactly one message per FIFO group — the head (oldest, lowest msg_id) message in each group — across up to qty groups in a single operation.
+Only groups with a visible, unlocked head message are included.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$queue = Pgmq\createQueue($pg, 'orders');
+$messages = $queue->readGroupedHead(10);
+```
+
+### Read grouped with poll
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+use Thesis\Time\TimeSpan;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$queue = Pgmq\createQueue($pg, 'orders');
+$messages = $queue->readGroupedWithPoll(
+    count: 10,
+    maxPoll: TimeSpan::fromSeconds(5),
+    pollInterval: TimeSpan::fromMilliseconds(250),
+);
+```
+
+### Read grouped round-robin with poll
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+use Thesis\Time\TimeSpan;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$queue = Pgmq\createQueue($pg, 'orders');
+$messages = $queue->readGroupedRRWithPoll(
+    count: 10,
+    maxPoll: TimeSpan::fromSeconds(5),
+    pollInterval: TimeSpan::fromMilliseconds(250),
+);
+```
+
+### Create FIFO index
+
+Create a GIN index on the headers column for FIFO queue performance optimization. This is required before using grouped read functions.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$queue = Pgmq\createQueue($pg, 'orders');
+Pgmq\createFifoIndex($pg, 'orders');
+```
+
+### Create FIFO index for all queues
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+Pgmq\createFifoIndexAll($pg);
 ```
 
 ### Consume messages

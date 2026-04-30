@@ -116,7 +116,7 @@ final readonly class Queue
 
     /**
      * @param positive-int $count
-     * @return iterable<Message>
+     * @return iterable<int, Message>
      */
     public function readBatch(int $count, ?TimeSpan $visibilityTimeout = null): iterable
     {
@@ -125,6 +125,96 @@ final readonly class Queue
             queue: $this->name,
             count: $count,
             visibilityTimeout: $visibilityTimeout,
+        );
+    }
+
+    /**
+     * @param positive-int $count
+     * @return iterable<int, Message>
+     */
+    public function readGroupedRR(int $count, ?TimeSpan $visibilityTimeout = null): iterable
+    {
+        return readGroupedRR(
+            pg: $this->pg,
+            queue: $this->name,
+            count: $count,
+            visibilityTimeout: $visibilityTimeout,
+        );
+    }
+
+    /**
+     * @param positive-int $count
+     * @return iterable<int, Message>
+     */
+    public function readGroupedRRWithPoll(
+        int $count,
+        ?TimeSpan $visibilityTimeout = null,
+        ?TimeSpan $maxPoll = null,
+        ?TimeSpan $pollInterval = null,
+    ): iterable {
+        return readGroupedRRWithPoll(
+            pg: $this->pg,
+            queue: $this->name,
+            count: $count,
+            visibilityTimeout: $visibilityTimeout,
+            maxPoll: $maxPoll,
+            pollInterval: $pollInterval,
+        );
+    }
+
+    /**
+     * @param positive-int $count
+     * @return iterable<int, Message>
+     */
+    public function readGrouped(int $count, ?TimeSpan $visibilityTimeout = null): iterable
+    {
+        return readGrouped(
+            pg: $this->pg,
+            queue: $this->name,
+            count: $count,
+            visibilityTimeout: $visibilityTimeout,
+        );
+    }
+
+    /**
+     * @param positive-int $count
+     * @return iterable<int, Message>
+     */
+    public function readGroupedWithPoll(
+        int $count,
+        ?TimeSpan $visibilityTimeout = null,
+        ?TimeSpan $maxPoll = null,
+        ?TimeSpan $pollInterval = null,
+    ): iterable {
+        return readGroupedWithPoll(
+            pg: $this->pg,
+            queue: $this->name,
+            count: $count,
+            visibilityTimeout: $visibilityTimeout,
+            maxPoll: $maxPoll,
+            pollInterval: $pollInterval,
+        );
+    }
+
+    /**
+     * @param positive-int $count
+     * @return iterable<int, Message>
+     */
+    public function readGroupedHead(int $count, ?TimeSpan $visibilityTimeout = null): iterable
+    {
+        return readGroupedHead(
+            pg: $this->pg,
+            queue: $this->name,
+            count: $count,
+            visibilityTimeout: $visibilityTimeout,
+        );
+    }
+
+    public function createFifoIndex(): void
+    {
+        createFifoIndex(
+            pg: $this->pg,
+            queue: $this->name,
         );
     }
 
