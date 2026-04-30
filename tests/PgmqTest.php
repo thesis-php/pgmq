@@ -44,8 +44,8 @@ final class PgmqTest extends TestCase
     {
         validateQueueName($this->pg, $this->randomQueueName());
 
-        self::expectException(PostgresQueryError::class);
-        self::expectExceptionMessage('queue name is too long, maximum length is 47 characters');
+        $this->expectException(PostgresQueryError::class);
+        $this->expectExceptionMessage('queue name is too long, maximum length is 47 characters');
 
         validateQueueName($this->pg, $this->randomQueueName() . $this->randomQueueName());
     }
@@ -70,7 +70,7 @@ final class PgmqTest extends TestCase
 
         $queue->drop();
 
-        self::expectException(QueueNotFound::class);
+        $this->expectException(QueueNotFound::class);
         $queue->metadata();
     }
 
@@ -280,8 +280,8 @@ final class PgmqTest extends TestCase
         $queue = createQueue($this->pg, $this->randomQueueName());
         $consumer = createConsumer($this->pg);
 
-        self::expectException(\LogicException::class);
-        self::expectExceptionMessage('Pooling is required. Set $pollInterval to a positive value.');
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('Pooling is required. Set $pollInterval to a positive value.');
         $consumer->consume(static fn() => null, new ConsumeConfig(
             queue: $queue->name,
             pollInterval: TimeSpan::fromSeconds(0),
@@ -387,8 +387,8 @@ final class PgmqTest extends TestCase
         send($this->pg, $queue->name, new SendMessage(self::TESTING_MESSAGE));
         send($this->pg, $queue->name, new SendMessage(self::TESTING_MESSAGE));
 
-        self::expectException(\RuntimeException::class);
-        self::expectExceptionMessage('Exception from consumer');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Exception from consumer');
         $context->awaitCompletion();
     }
 
@@ -412,6 +412,111 @@ final class PgmqTest extends TestCase
 
         $ctx->stop();
         $ctx->awaitCompletion();
+    }
+
+    public function testBindAndSendTopic(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+
+        bindTopic($this->pg, 'events.*', $queue->name);
+
+        $messageId = sendTopic($this->pg, 'events.created', new SendMessage(self::TESTING_MESSAGE, self::TESTING_HEADERS));
+
+        $message = $queue->read();
+        self::assertNotNull($message);
+        self::assertSame($messageId, $message->id);
+        self::assertSame(self::TESTING_MESSAGE, $message->value);
+        self::assertSame(self::TESTING_HEADERS, $message->headers);
+    }
+
+    public function testSendTopicWithDelay(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+
+        bindTopic($this->pg, 'orders.*', $queue->name);
+
+        sendTopic($this->pg, 'orders.placed', new SendMessage(self::TESTING_MESSAGE), TimeSpan::fromSeconds(1));
+
+        self::assertNull($queue->read());
+
+        delay(1.05);
+
+        $message = $queue->read();
+        self::assertNotNull($message); // @phpstan-ignore staticMethod.impossibleType
+        self::assertSame(self::TESTING_MESSAGE, $message->value);
+    }
+
+    public function testSendTopicToMultipleQueues(): void
+    {
+        $queue1 = createQueue($this->pg, $this->randomQueueName());
+        $queue2 = createQueue($this->pg, $this->randomQueueName());
+
+        bindTopic($this->pg, 'notifications.*', $queue1->name);
+        bindTopic($this->pg, 'notifications.*', $queue2->name);
+
+        $messages = sendTopic($this->pg, 'notifications.email', new SendMessage(self::TESTING_MESSAGE));
+
+        self::assertSame(2, $messages);
+        $message1 = $queue1->read();
+        self::assertNotNull($message1);
+        self::assertSame(self::TESTING_MESSAGE, $message1->value);
+
+        $message2 = $queue2->read();
+        self::assertNotNull($message2);
+        self::assertSame(self::TESTING_MESSAGE, $message2->value);
+    }
+
+    public function testUnbindTopic(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+
+        bindTopic($this->pg, 'events.*', $queue->name);
+
+        unbindTopic($this->pg, 'events.*', $queue->name);
+
+        sendTopic($this->pg, 'events.created', new SendMessage(self::TESTING_MESSAGE));
+
+        self::assertNull($queue->read());
+    }
+
+    public function testTestRouting(): void
+    {
+        $queue1 = createQueue($this->pg, $this->randomQueueName());
+        $queue2 = createQueue($this->pg, $this->randomQueueName());
+
+        bindTopic($this->pg, 'events.*', $queue1->name);
+        bindTopic($this->pg, 'events.created', $queue2->name);
+
+        $routes = [...testRouting($this->pg, 'events.created')];
+
+        self::assertCount(2, $routes);
+
+        $queueNames = array_map(static fn(TopicRoute $route): string => $route->queue, $routes);
+        self::assertContains($queue1->name, $queueNames);
+        self::assertContains($queue2->name, $queueNames);
+
+        foreach ($routes as $route) {
+            self::assertNotEmpty($route->pattern);
+            self::assertNotEmpty($route->compiledRegex);
+        }
+    }
+
+    public function testValidateRoutingKey(): void
+    {
+        validateRoutingKey($this->pg, 'events.created');
+
+        $this->expectException(PostgresQueryError::class);
+
+        validateRoutingKey($this->pg, 'events.*');
+    }
+
+    public function testValidateTopicPattern(): void
+    {
+        validateTopicPattern($this->pg, 'events.*');
+
+        $this->expectException(PostgresQueryError::class);
+
+        validateTopicPattern($this->pg, 'logs.**');
     }
 
     /**

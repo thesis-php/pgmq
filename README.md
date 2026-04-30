@@ -41,6 +41,13 @@ And only the consumer accepts `Amp\Postgres\PostgresConnection`, because it itse
  - [Delete batch](#delete-batch)
  - [Enable notify insert](#enable-notify-insert)
  - [Disable notify insert](#disable-notify-insert)
+ - [Bind topic](#bind-topic)
+ - [Unbind topic](#unbind-topic)
+ - [Send topic](#send-topic)
+ - [Send topic with delay](#send-topic-with-delay)
+ - [Test routing](#test-routing)
+ - [Validate routing key](#validate-routing-key)
+ - [Validate topic pattern](#validate-topic-pattern)
  - [Consume messages](#consume-messages)
 
 ### Create queue
@@ -406,6 +413,100 @@ $pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''
 
 $queue = Pgmq\createQueue($pg, 'events');
 $queue->disableNotifyInsert();
+```
+
+### Bind topic
+
+Bind a queue to a topic pattern. Messages sent with a routing key matching the pattern will be delivered to the queue.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$queue = Pgmq\createQueue($pg, 'emails');
+Pgmq\bindTopic($pg, 'notifications.*', $queue->name);
+```
+
+### Unbind topic
+
+Remove a queue binding from a topic pattern.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+Pgmq\unbindTopic($pg, 'notifications.*', 'emails');
+```
+
+### Send topic
+
+Send a message to all queues bound to patterns matching the given routing key.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$matched = Pgmq\sendTopic($pg, 'notifications.email', new Pgmq\SendMessage('{"user": 1}'));
+```
+
+### Send topic with delay
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+use Thesis\Time\TimeSpan;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+$matched = Pgmq\sendTopic(
+    $pg,
+    'notifications.email',
+    new Pgmq\SendMessage('{"user": 1}'),
+    TimeSpan::fromSeconds(5),
+);
+```
+
+### Test routing
+
+Test which queues would receive a message for a given routing key without actually sending a message.
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+foreach (Pgmq\testRouting($pg, 'notifications.email') as $route) {
+    var_dump($route->pattern, $route->queue, $route->compiledRegex);
+}
+```
+
+### Validate routing key
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+Pgmq\validateRoutingKey($pg, 'events.created'); // throws PostgresQueryError if invalid
+```
+
+### Validate topic pattern
+
+```php
+use Thesis\Pgmq;
+use Amp\Postgres;
+
+$pg = new Postgres\PostgresConnectionPool(Postgres\PostgresConfig::fromString(''));
+
+Pgmq\validateTopicPattern($pg, 'events.*'); // throws PostgresQueryError if invalid
 ```
 
 ### Consume messages
