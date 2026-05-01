@@ -222,6 +222,7 @@ final class PgmqTest extends TestCase
 
         $messages = [...$queue->readPoll()];
         self::assertCount(1, $messages);
+        /** @phpstan-ignore offsetAccess.notFound */
         self::assertSame(self::TESTING_MESSAGE, $messages[0]->value);
     }
 
@@ -442,7 +443,7 @@ final class PgmqTest extends TestCase
         delay(1.05);
 
         $message = $queue->read();
-        self::assertNotNull($message); // @phpstan-ignore staticMethod.impossibleType
+        self::assertNotNull($message);
         self::assertSame(self::TESTING_MESSAGE, $message->value);
     }
 

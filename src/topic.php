@@ -63,7 +63,7 @@ function sendTopic(
             'routing_key' => $routingKey,
             'msg' => $message->valueJson,
             'headers' => $message->headerJson,
-            'delay' => max((int) $delay->toSeconds(), 0),
+            'delay' => max($delay->toSeconds(), 0),
         ])
         ->fetchRow() ?? throw new \RuntimeException("Failed to send message using routingKey {$routingKey}.");
 

@@ -223,7 +223,7 @@ function send(
             'queue_name' => $queue,
             'msg' => $message->valueJson,
             'headers' => $message->headerJson,
-            'delay' => $delay instanceof TimeSpan ? (int) $delay->toSeconds() : $delay->format(\DateTimeInterface::RFC3339),
+            'delay' => $delay instanceof TimeSpan ? $delay->toSeconds() : $delay->format(\DateTimeInterface::RFC3339),
         ])
         ->fetchRow() ?? throw new \RuntimeException("Failed to send message to the queue {$queue}.");
 
