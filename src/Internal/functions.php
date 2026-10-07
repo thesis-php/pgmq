@@ -42,6 +42,7 @@ function consume(
         $watcher,
         $completionMarker,
         $context,
+        $polls,
     ): void {
         $watcher->watch();
 
@@ -66,6 +67,12 @@ function consume(
                 }
 
                 $tx->commit();
+
+                // A full batch means the queue may hold more messages. Inserts that already happened will not notify
+                // again, so waiting for the next signal would leave the backlog idle for up to $pollInterval.
+                if (\count($messages) === $config->batch && !$polls->isComplete()) {
+                    $polls->pushAsync(null)->ignore();
+                }
             } catch (\Throwable $e) {
                 $tx->rollback();
                 $completionMarker->error($e);

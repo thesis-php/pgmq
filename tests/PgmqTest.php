@@ -8,6 +8,7 @@ use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnection;
 use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
@@ -323,6 +324,38 @@ final class PgmqTest extends TestCase
         self::assertCount(2, $consumed);
         self::assertEquals($messageIds, array_keys($consumed));
         self::assertEquals([self::TESTING_MESSAGE, self::TESTING_MESSAGE], array_values($consumed));
+        self::assertSame(0, $queue->metrics()->length);
+    }
+
+    public function testConsumerDrainsBacklogWithoutWaitingForPollInterval(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->sendBatch(array_fill(0, 25, new SendMessage(self::TESTING_MESSAGE)));
+
+        $consumed = 0;
+
+        $consumer = createConsumer($this->pg);
+        $context = $consumer->consume(
+            static function (array $messages, ConsumeController $ctrl) use (&$consumed): void {
+                $consumed += \count($messages);
+                $ctrl->ack($messages);
+
+                if ($consumed === 25) {
+                    $ctrl->stop();
+                }
+            },
+            new ConsumeConfig(
+                queue: $queue->name,
+                batch: 10,
+                pollInterval: TimeSpan::fromSeconds(10),
+            ),
+        );
+
+        // The backlog is already there: no further inserts will wake the consumer up, so a full batch must
+        // trigger the next read immediately instead of waiting for the poll interval (2 x 10 s for 25 messages).
+        $context->awaitCompletion(new TimeoutCancellation(2));
+
+        self::assertSame(25, $consumed);
         self::assertSame(0, $queue->metrics()->length);
     }
 
