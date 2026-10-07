@@ -19,7 +19,7 @@ final readonly class ConsumeConfig
     /**
      * @param non-empty-string $queue
      * @param positive-int $batch
-     * @param bool $listenForInserts will call {@see enableNotifyInsert} and will listen for notifications from the channel, which significantly optimizes the number of requests to the Postgres server for new messages. It is recommended to enable it.
+     * @param bool $listenForInserts will call {@see ensureNotifyInsert} and will listen for notifications from the channel, which significantly optimizes the number of requests to the Postgres server for new messages. It is recommended to enable it.
      */
     public function __construct(
         public string $queue,

@@ -295,6 +295,27 @@ final readonly class Queue
         );
     }
 
+    /**
+     * @return non-empty-string
+     */
+    public function ensureNotifyInsert(?TimeSpan $throttleInterval = null): string
+    {
+        return ensureNotifyInsert(
+            pg: $this->pg,
+            queue: $this->name,
+            throttleInterval: $throttleInterval,
+        );
+    }
+
+    public function isNotifyInsertEnabled(?TimeSpan $throttleInterval = null): bool
+    {
+        return isNotifyInsertEnabled(
+            pg: $this->pg,
+            queue: $this->name,
+            throttleInterval: $throttleInterval,
+        );
+    }
+
     public function disableNotifyInsert(): void
     {
         disableNotifyInsert(

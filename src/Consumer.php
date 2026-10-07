@@ -48,7 +48,7 @@ final class Consumer
         $watchers[] = $timeoutWatcher;
 
         if ($config->listenForInserts) {
-            $channelName = $queue->enableNotifyInsert();
+            $channelName = $queue->ensureNotifyInsert();
 
             $watchers[] = new Internal\ChannelWatcher(
                 $polls,

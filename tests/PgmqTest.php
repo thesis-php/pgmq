@@ -8,10 +8,12 @@ use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnection;
 use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Thesis\Time\TimeSpan;
+use function Amp\async;
 use function Amp\delay;
 
 #[CoversClass(Queue::class)]
@@ -274,6 +276,159 @@ final class PgmqTest extends TestCase
         self::assertSame(channelName($queue->name), $queue->enableNotifyInsert(TimeSpan::fromSeconds(1)));
 
         $queue->disableNotifyInsert();
+    }
+
+    public function testConsumerStartDoesNotWaitForProducerTransactions(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->enableNotifyInsert();
+
+        // A producer is in the middle of a transaction that has already inserted into the queue.
+        $producer = $this->pg->beginTransaction();
+        send($producer, $queue->name, new SendMessage(self::TESTING_MESSAGE));
+
+        $pg = $this->pg;
+
+        try {
+            // A worker (re)starts: notifications are already set up, so it must not touch the trigger. Recreating it
+            // takes a table lock that waits for every open producer transaction and blocks new inserts meanwhile.
+            /** @var ConsumeContext $context */
+            $context = async(static fn(): ConsumeContext => createConsumer($pg)->consume(
+                static function (): void {},
+                new ConsumeConfig($queue->name),
+            ))->await(new TimeoutCancellation(1));
+
+            $context->stop();
+            $context->awaitCompletion();
+        } finally {
+            $producer->rollback();
+        }
+
+        self::assertTrue($queue->isNotifyInsertEnabled());
+    }
+
+    public function testEnsureNotifyInsertKeepsExistingSetupAndEnablesMissingOne(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+
+        self::assertFalse($queue->isNotifyInsertEnabled());
+        self::assertSame(channelName($queue->name), $queue->ensureNotifyInsert());
+        self::assertTrue($queue->isNotifyInsertEnabled());
+
+        // Already enabled with the same throttle: nothing to do.
+        self::assertSame(channelName($queue->name), $queue->ensureNotifyInsert());
+        self::assertTrue($queue->isNotifyInsertEnabled());
+
+        // A different throttle is a different setup: it is applied.
+        $queue->ensureNotifyInsert(TimeSpan::fromSeconds(1));
+        self::assertTrue($queue->isNotifyInsertEnabled(TimeSpan::fromSeconds(1)));
+        self::assertFalse($queue->isNotifyInsertEnabled());
+
+        $queue->disableNotifyInsert();
+        self::assertFalse($queue->isNotifyInsertEnabled(TimeSpan::fromSeconds(1)));
+    }
+
+    public function testConcurrentColdStartsCreateTheTriggerOnce(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName()); // notifications not set up yet
+
+        // A producer keeps an insert into the queue open, so that every consumer start has to wait for the table lock
+        // and the starts are guaranteed to overlap.
+        $producer = $this->pg->beginTransaction();
+        send($producer, $queue->name, new SendMessage(self::TESTING_MESSAGE));
+
+        $dsn = (string) getenv('THESIS_PGMQ_DSN');
+        $creations = $this->countTriggerCreations(static function () use ($dsn, $queue, $producer): void {
+            $starts = [];
+
+            for ($i = 0; $i < 4; ++$i) {
+                // Each consumer has its own pool, as separate worker processes do (one pool cannot LISTEN twice).
+                $pool = new PostgresConnectionPool(PostgresConfig::fromString($dsn));
+                $starts[] = async(static fn(): ConsumeContext => createConsumer($pool)->consume(
+                    static function (): void {},
+                    new ConsumeConfig($queue->name),
+                ));
+            }
+
+            delay(0.5);
+            $producer->rollback();
+
+            foreach ($starts as $start) {
+                /** @var ConsumeContext $context */
+                $context = $start->await(new TimeoutCancellation(5));
+                $context->stop();
+                $context->awaitCompletion();
+            }
+        }, $queue->name);
+
+        self::assertSame(1, $creations, 'concurrent starts must not race into enable_notify_insert()');
+        self::assertTrue($queue->isNotifyInsertEnabled());
+    }
+
+    public function testEnsureNotifyInsertRestoresLostThrottleRow(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->enableNotifyInsert();
+
+        // pgmq.notify_insert_throttle is UNLOGGED: crash recovery empties it while the trigger survives.
+        $this->pg->execute('DELETE FROM pgmq.notify_insert_throttle WHERE queue_name = :queue_name', ['queue_name' => $queue->name]);
+        self::assertFalse($queue->isNotifyInsertEnabled());
+
+        $queue->ensureNotifyInsert();
+
+        self::assertTrue($queue->isNotifyInsertEnabled());
+    }
+
+    public function testEnsureNotifyInsertRecreatesDisabledTrigger(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->enableNotifyInsert();
+        $this->pg->query(\sprintf('ALTER TABLE pgmq.q_%s DISABLE TRIGGER trigger_notify_queue_insert_listeners', $queue->name));
+        self::assertFalse($queue->isNotifyInsertEnabled());
+
+        $queue->ensureNotifyInsert();
+
+        self::assertTrue($queue->isNotifyInsertEnabled());
+    }
+
+    public function testEnsureNotifyInsertRecreatesTriggerCallingAnotherFunction(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->enableNotifyInsert();
+        $this->pg->query('CREATE OR REPLACE FUNCTION public.thesis_test_noop_trigger() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$');
+        $this->pg->query(\sprintf('DROP TRIGGER trigger_notify_queue_insert_listeners ON pgmq.q_%s', $queue->name));
+        $this->pg->query(\sprintf(
+            'CREATE CONSTRAINT TRIGGER trigger_notify_queue_insert_listeners AFTER INSERT ON pgmq.q_%s DEFERRABLE FOR EACH ROW EXECUTE PROCEDURE public.thesis_test_noop_trigger()',
+            $queue->name,
+        ));
+        self::assertFalse($queue->isNotifyInsertEnabled());
+
+        $queue->ensureNotifyInsert();
+
+        self::assertTrue($queue->isNotifyInsertEnabled());
+    }
+
+    public function testEnsureNotifyInsertWorksInsideAnOpenTransaction(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+
+        $tx = $this->pg->beginTransaction();
+        ensureNotifyInsert($tx, $queue->name);
+        self::assertTrue(isNotifyInsertEnabled($tx, $queue->name));
+        $tx->rollback();
+
+        self::assertFalse($queue->isNotifyInsertEnabled(), 'the setup belongs to the caller\'s transaction');
+    }
+
+    public function testEnsureNotifyInsertChangesThrottleWithoutRecreatingTrigger(): void
+    {
+        $queue = createQueue($this->pg, $this->randomQueueName());
+        $queue->enableNotifyInsert(TimeSpan::fromSeconds(1));
+
+        $creations = $this->countTriggerCreations(static fn() => $queue->ensureNotifyInsert(), $queue->name);
+
+        self::assertSame(0, $creations);
+        self::assertTrue($queue->isNotifyInsertEnabled());
     }
 
     public function testInvalidConsumerConfiguration(): void
@@ -635,6 +790,42 @@ final class PgmqTest extends TestCase
         $this->expectException(PostgresQueryError::class);
 
         validateTopicPattern($this->pg, 'logs.**');
+    }
+
+    /**
+     * Runs $action and returns how many times the notify trigger of the queue was created meanwhile (event trigger).
+     *
+     * @param callable(): mixed $action
+     * @param non-empty-string $queue
+     */
+    private function countTriggerCreations(callable $action, string $queue): int
+    {
+        $this->pg->query('CREATE TABLE IF NOT EXISTS public.thesis_test_ddl (object_identity text)');
+        $this->pg->query('TRUNCATE public.thesis_test_ddl');
+        $this->pg->query(<<<'SQL'
+            CREATE OR REPLACE FUNCTION public.thesis_test_log_ddl() RETURNS event_trigger LANGUAGE plpgsql AS $$
+            DECLARE r record;
+            BEGIN
+                FOR r IN SELECT * FROM pg_event_trigger_ddl_commands() LOOP
+                    INSERT INTO public.thesis_test_ddl (object_identity) VALUES (r.object_identity);
+                END LOOP;
+            END $$
+            SQL);
+        $this->pg->query('DROP EVENT TRIGGER IF EXISTS thesis_test_ddl');
+        $this->pg->query("CREATE EVENT TRIGGER thesis_test_ddl ON ddl_command_end WHEN TAG IN ('CREATE TRIGGER') EXECUTE FUNCTION public.thesis_test_log_ddl()");
+
+        try {
+            $action();
+        } finally {
+            $this->pg->query('DROP EVENT TRIGGER IF EXISTS thesis_test_ddl');
+        }
+
+        /** @var array{n: int} $row */
+        $row = $this->pg
+            ->execute('SELECT count(*)::int AS n FROM public.thesis_test_ddl WHERE object_identity LIKE :pattern', ['pattern' => '% on pgmq.q_' . $queue])
+            ->fetchRow();
+
+        return $row['n'];
     }
 
     /**
